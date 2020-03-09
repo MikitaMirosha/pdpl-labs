@@ -1,0 +1,233 @@
+.MODEL TINY 
+.STACK 100H  
+.CODE
+    
+    MOV AX,@DATA	   ; установить в регистр AX смещение для данных
+    MOV DS,AX		   ; установить регистр DS в AX. DS указывает на начало данных программы
+              
+    LEA DX,base_message	   ; в регистр DX помещается адрес base_message
+    CALL output_string	   ; переход к output_string. В этой процедуре выводится сообщение 'ENTER BASE STRING:'
+
+    LEA DX,base_string	   ; в регистр DX помещается адрес base_string
+    CALL input_string	   ; переход к input_string. В этой процедуре вводим с клавиатуры базовую строку
+            
+    LEA DX,find_message    ; в регистр DX помещается адрес find_message
+    CALL output_string	   ; переход к output_string. В этой процедуре выводится сообщение 'ENTER THE WORD TO FIND IN THE BASE STRING:' 	
+
+    LEA DX,find_string	   ; в регистр DX помещается адрес find_string
+    CALL input_string	   ; переход к input_string. В этой процедуре вводим с клавиатуры слово, которое хотим найти в базовой строке
+     
+    LEA DX,insert_message  ; в регистр DX помещается адрес insert_message 
+    CALL output_string	   ; переход к output_string. В этой процедуре выводится сообщение 'ENTER THE WORD TO INSERT IN THE BASE STRING:'
+
+    LEA DX,insert_string   ; в регистр DX помещается адрес insert_string
+    CALL input_string      ; переход к input_string. В этой процедуре вводим с клавиатуры слово, которое хотим вставить перед введенным ранее 
+                        
+    XOR AX, AX	           ; поразрядное исключающее ИЛИ. Обнуляет регистр AX, сбрасывает флаги
+    XOR DX, DX 		   ; поразрядное исключающее ИЛИ. Обнуляет регистр DX, сбрасывает флаги
+                       
+    MOV AL, base_string[1]    ; длина строки     
+    CMP AX, 0	              ; сравнивает AX и 0
+    JE error                  ; JE переходит к метке error, если AX = 0
+    
+    MOV DL, insert_string[1]  ; длина строки
+    CMP DX, 0	              ; сравнивает DX и 0
+    JE error 		      ; JE переходит к метке error, если DX = 0
+    
+    XOR DX, DX  	      ; поразрядное исключающее ИЛИ. Обнуляет регистр DX, сбрасывает флаги
+
+    MOV DL, find_string[1]    ; поиск строки
+    CMP DX, 0                 ; сравнивает DX и 0
+    JE error                  ; JE переходит к метке error, если DX = 0  
+                                  
+    ; SI - указатель на начало базовой строки 
+    ; DI - указатель на начало вставляемой строки 
+    ; AL - базовая строка, DL - вставляемая строка, CL - конечная строка
+    
+    MOV SI, OFFSET base_string + 2	; записывает в индекс источника (SI) смещение base_string + 2	
+    MOV DI, OFFSET find_string + 2	; записывает в индекс приемника (DI) смещение find_string + 2	
+    
+    SUB AL, DL   			; вычитает из AL DL, в AL записывается результат вычитания
+      
+    XOR CX, CX				; поразрядное исключающее ИЛИ. Обнуляет регистр CX, сбрасывает флаги
+    MOV CL, AL				; CL = AL
+    INC CX				; увеличивает CX на 1
+    
+search:   				; метка для поиска слова перед которым потом вставим новое слова
+    ;PUSHA	                        ; сохраняет в стеке содержимое всех регистров: АХ, СХ, DX, ВХ. 
+    PUSH AX
+    PUSH CX
+    PUSH DX
+    PUSH BX 
+    PUSH BP
+    PUSH SI
+    PUSH DI   
+    XOR CX, CX  			; поразрядное исключающее ИЛИ. Обнуляет регистр CX, сбрасывает флаги
+    MOV CX, DX 				; CX = DX 
+    REPE cmpsb                          ; cmpsb: CX - кол-во символов для сравнения, SI, DI - указатели на сопоставимые строки. REPE - повторять пока не равно
+    JZ found 				; переход, если содержимое = 0
+    ;POPA				; извлечь из стека значение  
+    POP DI
+    POP SI
+    POP BP
+    POP BX
+    POP DX
+    POP CX
+    POP AX		  
+    INC SI				; увеличить SI на 1        
+LOOP search				; цикл для поиска
+
+    MOV AH,9				; функция DOS вывода строки
+    LEA DX, not_found_message           ; в регистр DX помещяется адрес not_found_message               
+    INT 21H 				; вывод сообщения 'ERROR! THERE IS NO SUCH WORD IN THE STRING!'
+    INT 20H				; выход из программы
+
+    error:
+
+    LEA DX, error_message   		; в регистр DX помещяется адрес error_message
+    CALL output_string			; переход к output_string. В этой процедуре выводится сообщение 'INPUT ERROR!!!'
+    RET					; выход из процедуры
+         
+    found: 
+        
+    MOV CX, SI				; CX = SI
+    SUB CX, OFFSET base_string + 2      ; количество символов перед найденным словом + длина найденного слова 
+        
+    XOR AX, AX			        ; поразрядное исключающее ИЛИ. Обнуляет регистр AX, сбрасывает флаги
+    MOV AL, find_string[1]		; AL = find_string[1]
+   
+    MOV SI, OFFSET insert_string + 2	; SI = OFFSET insert_string + 2 со смещением
+    SUB CX, AX          		; позиция для вставки, число символов перед найденным словом 
+   
+    CMP CX, 0			        ; сравнение CX и 0
+    JZ first_word			; если 0, то переход к first_word т.к. найдено самое первое слово перед которым вставим новое
+			
+    PUSH CX				; вставить в стек CX, CX - кол-во символов для копирования 
+        
+    MOV DI, OFFSET result_string + 1    ; копировать строку: DI - откуда копировать, SI - база копирования
+    MOV SI, OFFSET base_string + 2      ; base_string = BBBBB BBB FFFF RRRRR
+                                        ; insert_str = IIII
+    CALL copy_string                    ; result_str = BBBB_BBB_
+        
+    PUSH SI                             ; помещаем в стек SI, SI - указатель на остальной base_string
+        
+    ; первое слово:
+        
+    XOR CX, CX				; поразрядное исключающее ИЛИ. Обнуляет регистр CX, сбрасывает флаги
+    MOV CL, insert_string[1]	        ; CL = insert_string[1]
+    MOV SI, OFFSET insert_string + 2	; SI = OFFSET insert_string + 2
+        
+    CALL copy_string			; result_str = BBBB_BBB_IIII  
+        
+    XOR CX, CX                          ; отдельно вставить слово пробелом
+    MOV CL, 1			        ; CL = 1
+    MOV SI, ' '				; SI = ' '
+    CALL copy_string			; result_str = BBBB_BBB_IIII_
+        
+    POP SI      			; достать из стека SI
+    POP CX				; достать из стека CX
+    INC CX                              ; +OFFSET, инкрементируем OFFSET
+    INC CX				; +OFFSET, инкрементируем OFFSET
+    CALL copy_string                    ; result_str = BBBB_BBB_IIII_FFFF_RRRRR
+        
+    JMP res_in				; переход к res_in. Этот переход безусловный				
+        
+    first_word:   			; метка, если вставляем новое слово перед первым словом базовой строки
+
+    XOR CX, CX				; обнуляет регистр CX. (???) - отдельно вставить слово пробелом
+    MOV CL, insert_string[1]		; CL = insert_string[1]
+    MOV DI, OFFSET result_string + 1    ; DI = OFFSET result_string + 1 
+    MOV SI, OFFSET insert_string + 2  	; SI = OFFSET insert_string + 2
+
+    CALL copy_string     		; переход к copy_string. В этой процедуре происходит копирование срок
+
+    XOR CX, CX          		; отдельно вставить слово пробелом. Обнуляет регистр CX, сбрасывает флаги
+    MOV CL, 1				; CL = 1
+    MOV SI, ' '				; SI = ' '
+
+    CALL copy_string      	        ; переход к copy_string. В этой процедуре происходит копирование срок
+       
+    MOV CL, base_string[1]   		; CL = base_string[1]
+    MOV SI, OFFSET base_string + 2 	; SI = OFFSET base_string + 2 
+
+    CALL copy_string    	        ; переход к copy_string. В этой процедуре происходит копирование срок
+
+    res_in:      
+
+    LEA DX, result_message   		; в регистр DX помещяется адрес result_message
+    CALL output_string			; переход к output_string. В этой процедуре выводится 'RESULT STRING:'
+    LEA DX, result_string+1		; в регистр DX помещяется адрес result_string+1
+    CALL output_string			; переход к output_string. В этой процедуре выводится финальная строка   
+    INT 20H				; прерывание для выхода из программы
+     
+; output_string и input_string в регистре DX
+output_string PROC  
+    ;PUSHA  				; сохраняет в стеке все 16-битные значения
+    PUSH AX
+    PUSH CX
+    PUSH DX
+    PUSH BX 
+    PUSH BP
+    PUSH SI
+    PUSH DI    
+    
+    MOV DL, 0DH				; 0DH - возврат каретки
+    MOV AH, 02H				; записать символ в STDOUT с проверкой на Ctrl+Break
+    INT 21H 				; вызвать DOS для печати строки
+    
+    MOV DL, 0AH				; считать строку символов из STDIN в буфер
+    MOV AH, 02H				; записать символ в STDOUT с проверкой на Ctrl+Break
+    INT 21H          			; вызвать DOS для печати строки
+    
+    ;POPA				; извлечь из стека все 16-битные значения
+    POP DI
+    POP SI
+    POP BP
+    POP BX
+    POP DX
+    POP CX
+    POP AX	
+    MOV AH,9				; функция DOS печати строки
+    INT 21H				; вызвать DOS для печати строки
+    
+    RET    				; выход из процедуры
+output_string ENDP    
+
+input_string PROC         
+    PUSH AX				; сохранение в стеке регистра AX
+    MOV AH,0AH				; считать строку символов из STDIN в буфер
+    INT 21H   				; вызвать DOS для печати строки. Здесь записываем с клавиатуры базовую строку
+    POP AX				; извлечь из стека AX
+    RET 				; выход из процедуры
+input_string ENDP            
+
+					;SI - указатель на начало базовой строки 
+					;DI - указатель на начало вставляемой строки 
+copy_string PROC  
+    PUSH AX  				; сохранение в стеке регистра AX
+    CMP CX, 0				; сравнивает CX и 0
+    JZ end_copy   			; если 0, то переход к end_copy   
+    
+    loop_string:  			; если CX != 0, то работает цикл
+    MOV AX, [SI]			; AX = [SI]
+    MOV [DI], AX 			; [DI] = AX
+    INC SI				; SI + 1
+    INC DI				; DI + 1
+    LOOP loop_string			; LOOP уменьшает значение CX и работает пока CX != 0
+   
+    end_copy:        
+    POP AX  				; извлечь из стека AX
+    RET					; выход из программы
+copy_string ENDP
+
+.DATA 
+    base_message DB "ENTER BASE STRING: $" 
+    find_message DB "ENTER THE WORD TO FIND IN THE BASE STRING: $"
+    not_found_message DB "ERROR! THERE IS NO SUCH WORD IN THE STRING! $"    
+    insert_message  DB "ENTER THE WORD TO INSERT IN THE BASE STRING: $" 
+    result_message DB "RESULT STRING: $"  
+    error_message DB "INPUT ERROR!!! $"
+    base_string DB 202,202 DUP ('$')     
+    find_string DB 202,202 DUP ('$')               
+    insert_string DB 202,202 DUP ('$') 
+    result_string DB 202,202 DUP ('$')                           
